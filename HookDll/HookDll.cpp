@@ -1,0 +1,84 @@
+//---------------------------------------------------------------------------
+
+#include <vcl.h>
+#include <windows.h>
+#pragma hdrstop
+//---------------------------------------------------------------------------
+//   Important note about DLL memory management when your DLL uses the
+//   static version of the RunTime Library:
+//
+//   If your DLL exports any functions that pass String objects (or structs/
+//   classes containing nested Strings) as parameter or function results,
+//   you will need to add the library MEMMGR.LIB to both the DLL project and
+//   any other projects that use the DLL.  You will also need to use MEMMGR.LIB
+//   if any other projects which use the DLL will be performing new or delete
+//   operations on any non-TObject-derived classes which are exported from the
+//   DLL. Adding MEMMGR.LIB to your project will change the DLL and its calling
+//   EXE's to use the BORLNDMM.DLL as their memory manager.  In these cases,
+//   the file BORLNDMM.DLL should be deployed along with your DLL.
+//
+//   To avoid using BORLNDMM.DLL, pass string information using "char *" or
+//   ShortString parameters.
+//
+//   If your DLL uses the dynamic version of the RTL, you do not need to
+//   explicitly add MEMMGR.LIB as this will be done implicitly for you
+//---------------------------------------------------------------------------
+
+#define WM_KEY_HOOK    WM_USER+200  //自定义消息  键盘
+
+extern "C" {
+  __declspec(dllexport)  BOOL APIENTRY StartKeyHook(); //安装键盘钩子
+  __declspec(dllexport)  BOOL APIENTRY EndHook();   //删除键盘钩子
+  LRESULT WINAPI KeyProc(int nCode,WPARAM wparam,LPARAM lparam);
+}
+
+HHOOK     hKeyHook   = NULL;          //键盘钩子函数句柄
+
+HINSTANCE hInstance  = NULL;          //DLL实例句柄
+
+#pragma argsused
+int WINAPI DllEntryPoint(HINSTANCE hinst, unsigned long reason, void* lpReserved)
+{
+    hInstance = hinst;
+    return 1;
+}
+//---------------------------------------------------------------------------
+
+__declspec(dllexport)  BOOL APIENTRY StartKeyHook()
+{
+    hKeyHook   = SetWindowsHookEx(WH_KEYBOARD_LL, (HOOKPROC)KeyProc, hInstance, 0);
+    return (bool)hKeyHook;
+}
+
+__declspec(dllexport)  BOOL APIENTRY EndHook()
+{
+    if(hKeyHook && UnhookWindowsHookEx(hKeyHook))
+    {
+        hKeyHook = NULL;
+    }
+
+    return (bool)hKeyHook;
+}
+
+__declspec(dllexport) LRESULT WINAPI KeyProc(int nCode, WPARAM wparam, LPARAM lparam)
+{
+    if(NULL != hKeyHook)
+    {
+        HWND hwnd;
+        hwnd = FindWindow(NULL, "HOOK_TEST");
+
+        KBDLLHOOKSTRUCT *keyMSG = (KBDLLHOOKSTRUCT *)lparam;
+        if(nCode == HC_ACTION && (WM_KEYDOWN == wparam || wparam == WM_SYSKEYDOWN))
+        {
+
+                DWORD dwMsg = 1;
+                dwMsg += keyMSG->scanCode << 16;
+                dwMsg += keyMSG->flags << 24;
+
+                SendMessage(hwnd, WM_KEY_HOOK, (WPARAM)(dwMsg), lparam);
+        }
+        return CallNextHookEx(hKeyHook, nCode, wparam, lparam);  //继续传递鼠标消息
+    }
+
+    return 0;
+}
